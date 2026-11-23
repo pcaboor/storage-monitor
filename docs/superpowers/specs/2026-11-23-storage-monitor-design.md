@@ -60,7 +60,7 @@ storage-monitor/
 | Module | Responsabilité | Interface |
 |---|---|---|
 | **Scan** | Parcourt le système de fichiers et publie sa progression ; annulable | `scan(root:) async throws -> FileTree`, plus un flux de `ScanProgress` |
-| **Model** | `FileTree` : stockage compact (tableaux et index parents, pas un objet par nœud) de 2 à 3 millions d'entrées, avec les tailles cumulées par dossier | Requêtes : enfants, chemin, taille, type dominant ; mutation : `remove(nodes:)` |
+| **Model** | `FileTree` : stockage compact (tableaux et index parents, pas un objet par nœud) de 2 à 3 millions d'entrées (mesuré : environ 240 Mo de RAM pour 2,5 millions), avec les tailles cumulées par dossier | Requêtes : enfants, chemin, taille, type dominant ; mutation : `remove(nodes:)` |
 | **Treemap** | Algorithme *squarified* ; fonction pure | `layout(sizes:in:) -> [CGRect]` |
 | **Suggestions** | Une `Rule` par catégorie, suivie d'une passe de déduplication | `FileTree -> [Suggestion]` |
 | **Cleanup** | `CleanupPlan` (regroupements, totaux, choix de méthode) et `Cleaner` (exécution, garde-fous, journal) | `[CartItem] -> CleanupPlan -> CleanupReport` |
@@ -84,20 +84,20 @@ Emplacement des données : `~/Library/Application Support/StorageMonitor/` (`las
 
 ### Données collectées par entrée
 
-Nom, index du parent, **taille allouée sur le disque** (et non la taille logique), date de modification, type (fichier, dossier ou bundle), indicateur « partage des blocs » (clone APFS) lorsqu'il est disponible.
+Nom, index du parent, **taille allouée sur le disque** (et non la taille logique), date de modification, type (fichier, dossier ou bundle), nombre de liens et identifiant de fichier. L'indicateur « partage des blocs » (clone APFS) n'est lu que pour les candidats de la recherche de doublons.
 
 ### Règles de mesure
 
 - **Taille allouée** : les fichiers creux, comme `Docker.raw`, sont comptés à leur taille réelle.
 - **Liens physiques** : si `nlink > 1`, le fichier n'est compté qu'une fois, grâce à un ensemble d'identifiants (périphérique, inode).
-- **Bundles** (`.app`, `.photoslibrary`, et tout paquet reconnu par le Finder) : un seul nœud feuille avec sa taille totale. On ne peut pas y entrer.
+- **Bundles**, reconnus par une liste d'extensions de paquets connues (`.app`, `.framework`, `.photoslibrary`, `.xcodeproj`, `.pages`, `.sparsebundle`…) : un seul nœud feuille avec sa taille totale. On ne peut pas y entrer.
 - **Clones APFS** : pas de dédoublonnage. Limite assumée et affichée dans le panier : la place libérée peut être inférieure à la taille indiquée.
 
 ### Performance
 
 - Lecture par lots avec `getattrlistbulk`.
 - Parallélisme sur les sous-dossiers, limité à 8 tâches concurrentes.
-- Objectif : moins de 2 minutes pour environ 2 millions d'entrées sur le SSD interne.
+- Objectif : moins de 2 minutes pour environ 2 millions d'entrées sur le SSD interne. Mesuré sur le prototype : 3 048 505 entrées de `/` en 40 secondes.
 
 ### Progression et annulation
 
@@ -150,7 +150,7 @@ En bas de la barre latérale :
 
 **Treemap du dossier courant :**
 - Deux niveaux de profondeur, dessinés avec le `Canvas` de SwiftUI.
-- **Couleur = type de contenu** : vidéos, images, audio, code, apps, archives, documents, système, autres. Un dossier prend la couleur de son type dominant en octets. Une légende est affichée.
+- **Couleur = type de contenu** : vidéos, images, audio, code, apps, archives, documents, système, autres. Un dossier prend la couleur du type qui pèse le plus parmi ses enfants directs, pondérés par leur taille. Une légende est affichée.
 - Les éléments trop petits pour être dessinés (moins de 4 × 4 pt) sont regroupés dans un bloc « N petits éléments ».
 - ✨ marque les éléments suggérés ; des hachures marquent ceux présents dans le panier.
 
