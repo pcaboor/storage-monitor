@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     targets: [
         .target(name: "StorageCore"),
+        .executableTarget(name: "StorageMonitor", dependencies: ["StorageCore"]),
         .testTarget(name: "StorageCoreTests", dependencies: ["StorageCore"]),
     ]
 )
